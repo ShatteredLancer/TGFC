@@ -1,5 +1,7 @@
 package net.jejer.hipda.utils;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.text.TextUtils;
 
 import com.mikepenz.fontawesome_typeface_library.FontAwesome;
@@ -11,10 +13,13 @@ import net.jejer.hipda.ui.HiApplication;
 
 public class HiUtils {
     public static final String UserAgentPrefix = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36";
+    private static final String NETWORK_SESSION_PREFS = "NetworkSessionPrefs";
+    private static final String USER_AGENT_PREF = "user_agent";
     public static final String BaseUrl = "https://bbs.tgfcer.com/";
+    public static final String WapBaseUrl = "https://wap.tgfcer.com/";
+    public static final String LionsUrl = "https://s.tgfcer.com/";
     public static final String Pic2_Url = "http://pic2.52tgfc.com/";
     public static final String SecCodeVerifyUrl = BaseUrl + "seccode.php?update=";
-    public static final String GoogleVerifyUrl = "https://wap.tgfcer.com/index.php?action=login";
     public static final String ThreadListUrl = BaseUrl + "forumdisplay.php?fid=";
     public static final String DetailListUrl = BaseUrl + "viewthread.php?tid=";
     public static final String ReplyUrl = BaseUrl + "post.php?action=reply&tid=";
@@ -45,14 +50,12 @@ public class HiUtils {
     public static final String UserInfoUrl = BaseUrl + "space.php?action=viewpro&uid=";
     public static final String AvatarBaseUrl = BaseUrl + "customavatars/";
 
-    public static final String LoginSubmit = BaseUrl + "logging.php?action=login&";
     public static final String LoginGetFormHash = BaseUrl + "logging.php?action=login";
+    public static final String LionsVerifyUrl = LionsUrl + "forumdisplay.php?fid=25&page=1";
     public static final String RatingSubmit = BaseUrl + "misc.php?action=rate&inajax=1";
     public static final String PreRating = BaseUrl + "misc.php?action=rate";
 
-    public static final String LionsUrl = "https://s.tgfcer.com/";
-
-    private static String userAgent;
+    private static volatile String userAgent;
 
     public final static String SMILE_PATH = "images/smilies/";
 
@@ -234,9 +237,32 @@ public class HiUtils {
     }
 
     public static String getUserAgent() {
-        if (userAgent == null)
-            userAgent = UserAgentPrefix;
+        if (userAgent == null) {
+            Context context = HiApplication.getAppContext();
+            if (context == null) {
+                userAgent = UserAgentPrefix;
+            } else {
+                SharedPreferences preferences = context.getSharedPreferences(
+                        NETWORK_SESSION_PREFS, Context.MODE_PRIVATE);
+                userAgent = preferences.getString(USER_AGENT_PREF, UserAgentPrefix);
+            }
+        }
         return userAgent;
+    }
+
+    /** Keep native requests on the exact User-Agent used to create the forum auth cookie. */
+    public static void setSessionUserAgent(String value) {
+        if (TextUtils.isEmpty(value))
+            return;
+
+        userAgent = value;
+        Context context = HiApplication.getAppContext();
+        if (context != null) {
+            context.getSharedPreferences(NETWORK_SESSION_PREFS, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(USER_AGENT_PREF, value)
+                    .apply();
+        }
     }
 
 }

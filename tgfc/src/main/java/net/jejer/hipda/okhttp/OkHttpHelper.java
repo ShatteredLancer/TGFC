@@ -27,6 +27,8 @@ import java.io.UnsupportedEncodingException;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
 import java.net.HttpCookie;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.SocketTimeoutException;
 import java.net.URLEncoder;
 import java.net.UnknownHostException;
@@ -105,16 +107,9 @@ public class OkHttpHelper {
         return reqBuilder.build();
     }
 
-    private boolean IsLions = false;
     private String LionsUrlCheck(String url) {
         String Result = url;
-        if (Result.contains("fid") && !Result.contains("fid=null")) {
-            if (Result.contains("fid=25"))
-                IsLions = true;
-            else
-                IsLions = false;
-        }
-        if(IsLions)
+        if (Result.contains("fid=25"))
             Result = url.replace(HiUtils.BaseUrl,HiUtils.LionsUrl);
         return Result;
     }
@@ -262,10 +257,69 @@ public class OkHttpHelper {
             cookieStore.removeAll();
     }
 
+    /** Import request cookies from the WebView session for native requests. */
+    public void importWebViewCookies() {
+        importWebViewCookies(true, HiUtils.BaseUrl);
+    }
+
+    /** Import WebView cookies while optionally preserving an already valid native session. */
+    public void importWebViewCookies(boolean clearExisting, String preferredUrl) {
+        android.webkit.CookieManager webCookieManager = android.webkit.CookieManager.getInstance();
+        if (clearExisting)
+            cookieStore.removeAll();
+
+        // CookieManager.getCookie() omits the source domain. During login, importing WAP and
+        // water-area values as well can therefore overwrite the freshly issued BBS session with
+        // an indistinguishable stale tgc_auth value. Read only the authoritative login host.
+        String url = TextUtils.isEmpty(preferredUrl) ? HiUtils.BaseUrl : preferredUrl;
+        {
+            String cookieHeader = webCookieManager.getCookie(url);
+            if (TextUtils.isEmpty(cookieHeader))
+                return;
+
+            try {
+                URI uri = new URI(url);
+                for (String cookiePart : cookieHeader.split(";")) {
+                    int separator = cookiePart.indexOf('=');
+                    if (separator <= 0)
+                        continue;
+                    String name = cookiePart.substring(0, separator).trim();
+                    String value = cookiePart.substring(separator + 1).trim();
+                    if (TextUtils.isEmpty(name))
+                        continue;
+                    HttpCookie cookie = new HttpCookie(name, value);
+                    // WebView exposes a Netscape-style Cookie header without attributes. HttpCookie
+                    // defaults new instances to RFC 2965 (version 1), which adds $Version/$Path/
+                    // $Domain fields that the forum's old PHP cookie parser does not handle reliably.
+                    cookie.setVersion(0);
+                    cookie.setPath("/");
+                    cookie.setSecure(url.startsWith("https://"));
+                    if (name.startsWith("tgc_"))
+                        cookie.setDomain(".tgfcer.com");
+                    cookieStore.add(uri, cookie);
+                }
+            } catch (URISyntaxException ignored) {
+                // URLs are application constants; import remains best-effort.
+            }
+        }
+    }
+
+    public boolean hasAuthCookieForUrl(String url) {
+        try {
+            for (HttpCookie cookie : cookieStore.get(new URI(url))) {
+                if ("tgc_auth".equals(cookie.getName()) && !TextUtils.isEmpty(cookie.getValue()))
+                    return true;
+            }
+        } catch (URISyntaxException ignored) {
+            // Only application constants are passed here.
+        }
+        return false;
+    }
+
     public boolean isLoggedIn() {
         List<HttpCookie> cookies = cookieStore.getCookies();
         for (HttpCookie cookie : cookies) {
-            if ("tgc_auth".equals(cookie.getName())) {
+            if ("tgc_auth".equals(cookie.getName()) && !TextUtils.isEmpty(cookie.getValue())) {
                 return true;
             }
         }
@@ -275,7 +329,7 @@ public class OkHttpHelper {
     public String getAuthCookie() {
         List<HttpCookie> cookies = cookieStore.getCookies();
         for (HttpCookie cookie : cookies) {
-            if ("tgc_auth".equals(cookie.getName())) {
+            if ("tgc_auth".equals(cookie.getName()) && !TextUtils.isEmpty(cookie.getValue())) {
                 return cookie.getValue();
             }
         }

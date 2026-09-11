@@ -1,4 +1,5 @@
 .gradle
+.local-tools/
 local.properties
 gradle.properties
 
@@ -23,3 +24,10 @@ build
 *.swp
 
 captures
+*.har
+.tmp-*
+*.jks
+*.keystore
+*.p12
+*.pfx
+release-signing.properties

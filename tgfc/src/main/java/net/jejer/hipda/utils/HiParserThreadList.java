@@ -37,23 +37,16 @@ public class HiParserThreadList {
 
         //parse uid and re-set username if necessary
         if (TextUtils.isEmpty(HiSettingsHelper.getInstance().getUid())) {
-            Elements spaceES = doc.select("a#my");
-            if (spaceES.size() == 1) {
-                String spaceUrl = spaceES.first().attr("href");
-                if (!TextUtils.isEmpty(spaceUrl)) {
-                    String uid = HttpUtils.getMiddleString(spaceUrl, "uid=", "");
-                    String username = Utils.nullToText(spaceES.first().text()).trim();
-                    if (!TextUtils.isEmpty(uid)
-                            && TextUtils.isDigitsOnly(uid)
-                            && !HiSettingsHelper.getInstance().getUid().equals(uid)) {
-                        //re-set username if it is not exactly SAME to user inputted with case sensitive
-                        if (!HiSettingsHelper.getInstance().getUsername().equals(username)
-                                && HiSettingsHelper.getInstance().getUsername().equalsIgnoreCase(username))
-                            HiSettingsHelper.getInstance().setUsername(username);
-                        //uid will be setted later
-                        threads.setUid(uid);
-                    }
-                }
+            ForumSessionUtils.Identity identity = ForumSessionUtils.findIdentity(doc);
+            if (!TextUtils.isEmpty(identity.uid)
+                    && TextUtils.isDigitsOnly(identity.uid)
+                    && !HiSettingsHelper.getInstance().getUid().equals(identity.uid)) {
+                // Re-set username if it is not exactly the same as the previous case-insensitive value.
+                if (!HiSettingsHelper.getInstance().getUsername().equals(identity.username)
+                        && HiSettingsHelper.getInstance().getUsername().equalsIgnoreCase(identity.username))
+                    HiSettingsHelper.getInstance().setUsername(identity.username);
+                // UID will be persisted after the loader returns.
+                threads.setUid(identity.uid);
             }
         }
 

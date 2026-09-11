@@ -18,6 +18,7 @@ import net.jejer.hipda.bean.HiSettingsHelper;
 import net.jejer.hipda.ui.AboutFragment;
 import net.jejer.hipda.ui.FragmentUtils;
 import net.jejer.hipda.ui.HiApplication;
+import net.jejer.hipda.ui.LoginDialog;
 import net.jejer.hipda.ui.MainFrameActivity;
 import net.jejer.hipda.utils.Constants;
 import net.jejer.hipda.utils.Logger;
@@ -161,7 +162,9 @@ public class SettingMainFragment extends BaseSettingFragment {
                                     }).create();
                     dialog.show();
                 } else {
-                    Toast.makeText(getActivity(), "已经退出登录，返回可以重新登录", Toast.LENGTH_SHORT).show();
+                    LoginDialog dialog = LoginDialog.getInstance(getActivity());
+                    if (dialog != null)
+                        dialog.show();
                 }
                 return true;
             }

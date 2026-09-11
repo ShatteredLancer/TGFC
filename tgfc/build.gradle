@@ -8,8 +8,37 @@ android {
         applicationId "net.jejer.tgfc.ng"
         minSdkVersion 14
         targetSdkVersion 28
-        versionCode 27
-        versionName '1.4.3'
+        versionCode 28
+        versionName '1.4.4'
+    }
+
+    // Release credentials stay outside the repository. Set TGFC_RELEASE_SIGNING_FILE to an
+    // external properties file, or place it at ~/.tgfc/release-signing.properties.
+    def releaseSigningProperties = new Properties()
+    def releaseSigningPath = System.getenv('TGFC_RELEASE_SIGNING_FILE')
+    if (releaseSigningPath == null || releaseSigningPath.trim().isEmpty()) {
+        releaseSigningPath = new File(System.getProperty('user.home'), '.tgfc/release-signing.properties').absolutePath
+    }
+    def releaseSigningFile = file(releaseSigningPath)
+    if (releaseSigningFile.exists()) {
+        releaseSigningFile.withInputStream { releaseSigningProperties.load(it) }
+    }
+    def releaseStoreFile = releaseSigningProperties.getProperty('storeFile')
+    def releaseStorePassword = releaseSigningProperties.getProperty('storePassword')
+    def releaseKeyAlias = releaseSigningProperties.getProperty('keyAlias')
+    def releaseKeyPassword = releaseSigningProperties.getProperty('keyPassword')
+    def hasReleaseSigning = [releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword]
+            .every { value -> value != null && !value.trim().isEmpty() }
+
+    if (hasReleaseSigning) {
+        signingConfigs {
+            release {
+                storeFile file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
@@ -17,6 +46,8 @@ android {
             minifyEnabled true
             zipAlignEnabled true
             shrinkResources false
+            if (hasReleaseSigning)
+                signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
             applicationVariants.all { variant ->
                 variant.outputs.each { output ->
@@ -27,6 +58,8 @@ android {
             }
         }
         debug {
+            applicationIdSuffix ".test"
+            versionNameSuffix "-test"
         }
     }
 }

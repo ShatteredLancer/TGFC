@@ -2,7 +2,7 @@
 buildscript {
     repositories {
         maven {
-            url 'http://maven.aliyun.com/nexus/content/groups/public'
+            url 'https://maven.aliyun.com/nexus/content/groups/public'
         }
         jcenter()
     }
@@ -15,7 +15,7 @@ allprojects {
     repositories {
         maven {
 //            url 'http://oss.sonatype.org/content/repositories/snapshots'
-            url 'http://maven.aliyun.com/nexus/content/groups/public'
+            url 'https://maven.aliyun.com/nexus/content/groups/public'
         }
         jcenter()
     }

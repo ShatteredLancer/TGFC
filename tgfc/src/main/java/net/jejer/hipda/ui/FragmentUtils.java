@@ -171,10 +171,18 @@ public class FragmentUtils {
     }
 
     public static void showThread(FragmentManager fragmentManager, boolean directOpen, String tid, String title, int page, int floor, String pid, int maxPage) {
+        showThread(fragmentManager, directOpen, tid, title, page, floor, pid, maxPage, 0);
+    }
+
+    public static void showThread(FragmentManager fragmentManager, boolean directOpen, String tid,
+                                  String title, int page, int floor, String pid, int maxPage,
+                                  int forumId) {
         Bundle arguments = new Bundle();
         arguments.putString(ThreadDetailFragment.ARG_TID_KEY, tid);
         arguments.putString(ThreadDetailFragment.ARG_TITLE_KEY, title);
         arguments.putInt(ThreadDetailFragment.ARG_MAX_PAGE_KEY, maxPage);
+        if (forumId > 0)
+            arguments.putInt(ThreadDetailFragment.ARG_FID_KEY, forumId);
         if (page != -1)
             arguments.putInt(ThreadDetailFragment.ARG_PAGE_KEY, page);
         if (floor != -1)

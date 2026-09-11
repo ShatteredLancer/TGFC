@@ -35,9 +35,11 @@ public class DetailListLoader extends AsyncTaskLoader<DetailListBean> {
     private String mGotoPostId;
     private int mPage;
     private String mRsp;
+    private boolean mLionsForum;
     private DetailListBean data;
 
-    public DetailListLoader(Context context, Handler handler, String tid, String gotoPostId, String title, int page) {
+    public DetailListLoader(Context context, Handler handler, String tid, String gotoPostId,
+                            String title, int page, boolean lionsForum) {
         super(context);
         mCtx = context;
         mHandler = handler;
@@ -45,6 +47,7 @@ public class DetailListLoader extends AsyncTaskLoader<DetailListBean> {
         mTitle = title;
         mGotoPostId = gotoPostId;
         mPage = page;
+        mLionsForum = lionsForum;
     }
 
     @Override
@@ -78,7 +81,7 @@ public class DetailListLoader extends AsyncTaskLoader<DetailListBean> {
 
             if (mRsp != null) {
                 if (!LoginHelper.checkLoggedin(mCtx, mRsp)) {
-                    int status = new LoginHelper(mCtx, mHandler).login();
+                    int status = new LoginHelper(mCtx, mHandler).login(mLionsForum);
                     if (status > Constants.STATUS_FAIL) {
                         break;
                     }
@@ -117,6 +120,9 @@ public class DetailListLoader extends AsyncTaskLoader<DetailListBean> {
         } else {
             mUrl = HiUtils.DetailListUrl + mTid + "&page=" + mPage;
         }
+
+        if (mLionsForum)
+            mUrl = mUrl.replace(HiUtils.BaseUrl, HiUtils.LionsUrl);
 
 //        if(mTitle.contains("[投票]"))
 //            mUrl = mUrl+"&do=viewspecialpost";

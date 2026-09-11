@@ -50,8 +50,8 @@ public class UpdateHelper {
         mSilent = isSilent;
 
         checkSite = "github";
-        checkUrl = "https://api.github.com/repos/Hs1r1us/TGFC/releases/latest";
-        downloadUrl = "https://github.com/Hs1r1us/TGFC/releases/download/v{version}/tgfc-ng-release-{version}.apk";
+        checkUrl = "https://api.github.com/repos/ShatteredLancer/TGFC/releases/latest";
+        downloadUrl = "https://github.com/ShatteredLancer/TGFC/releases/download/v{version}/tgfc-ng-release-{version}.apk";
 
     }
 

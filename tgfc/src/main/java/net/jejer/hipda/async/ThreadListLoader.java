@@ -72,7 +72,7 @@ public class ThreadListLoader extends AsyncTaskLoader<ThreadListBean> {
 
             if (mRsp != null) {
                 if (!LoginHelper.checkLoggedin(mCtx, mRsp)) {
-                    int status = new LoginHelper(mCtx, mHandler).login();
+                    int status = new LoginHelper(mCtx, mHandler).login(mForumId == 25);
                     if (status > Constants.STATUS_FAIL) {
                         break;
                     }

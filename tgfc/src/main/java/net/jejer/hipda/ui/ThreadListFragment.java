@@ -267,7 +267,6 @@ public class ThreadListFragment extends BaseFragment
             loadingProgressBar.show();
             mInloading = true;
             getLoaderManager().initLoader(0, null, mCallbacks);
-            getLoaderManager().restartLoader(0, null, mCallbacks).forceLoad();
         }
     }
 
@@ -311,7 +310,7 @@ public class ThreadListFragment extends BaseFragment
 
         if (LoginHelper.isLoggedIn()) {
             showNotification();
-        } else if (!HiSettingsHelper.getInstance().isLoginInfoValid()) {
+        } else {
             if (mThreadListAdapter != null) {
                 mThreadBeans.clear();
                 mThreadListAdapter.setBeans(mThreadBeans);
@@ -427,7 +426,8 @@ public class ThreadListFragment extends BaseFragment
             }
 
             setHasOptionsMenu(false);
-            FragmentUtils.showThread(getFragmentManager(), true, postBean.getTid(), postBean.getSubject(), -1, -1, null, -1);
+            FragmentUtils.showThread(getFragmentManager(), true, postBean.getTid(), postBean.getSubject(),
+                    -1, -1, null, -1, mForumId);
 
             //refresh thread list
             refresh();
@@ -486,7 +486,8 @@ public class ThreadListFragment extends BaseFragment
             String tid = thread.getTid();
             String title = thread.getTitle();
             setHasOptionsMenu(false);
-            FragmentUtils.showThread(getFragmentManager(), false, tid, title, -1, -1, null, thread.getMaxPage());
+            FragmentUtils.showThread(getFragmentManager(), false, tid, title, -1, -1, null,
+                    thread.getMaxPage(), mForumId);
         }
 
     }
@@ -505,7 +506,8 @@ public class ThreadListFragment extends BaseFragment
                 page = (int) Math.ceil((Integer.parseInt(thread.getCountCmts())) * 1.0f / maxPostsInPage);
             }
             setHasOptionsMenu(false);
-            FragmentUtils.showThread(getFragmentManager(), false, tid, title, page, ThreadDetailFragment.LAST_FLOOR, null, thread.getMaxPage());
+            FragmentUtils.showThread(getFragmentManager(), false, tid, title, page,
+                    ThreadDetailFragment.LAST_FLOOR, null, thread.getMaxPage(), mForumId);
             return true;
         }
     }
@@ -763,12 +765,16 @@ public class ThreadListFragment extends BaseFragment
                     refresh();
                     break;
                 case STAGE_NOT_LOGIN:
+                    if (LoginDialog.isLoginDialogShown()) {
+                        mTipBar.setVisibility(View.INVISIBLE);
+                        break;
+                    }
                     mTipBar.setBackgroundColor(ContextCompat.getColor(mCtx, R.color.pink));
                     mTipBar.setText(b.getString(STAGE_ERROR_KEY));
                     mTipBar.setVisibility(View.VISIBLE);
                     mThreadBeans.clear();
                     mThreadListAdapter.setBeans(mThreadBeans);
-                    //showLoginDialog();
+                    showLoginDialog();
                     break;
             }
             return false;
@@ -776,6 +782,10 @@ public class ThreadListFragment extends BaseFragment
     }
 
     private void showLoginDialog() {
+        // A stale loader callback may arrive after the WebView has completed login. Do not open
+        // a second dialog here because LoginDialog.onCreate() clears session cookies.
+        if (LoginDialog.isLoginDialogShown())
+            return;
         LoginDialog dialog = LoginDialog.getInstance(getActivity());
         if (dialog != null) {
             dialog.setHandler(mMsgHandler);

@@ -56,6 +56,7 @@ import net.jejer.hipda.BuildConfig;
 import net.jejer.hipda.R;
 import net.jejer.hipda.async.DetailListLoader;
 import net.jejer.hipda.async.FavoriteHelper;
+import net.jejer.hipda.async.LoginHelper;
 import net.jejer.hipda.async.PostAsyncTask;
 import net.jejer.hipda.bean.DetailBean;
 import net.jejer.hipda.bean.DetailListBean;
@@ -87,6 +88,7 @@ import de.greenrobot.event.EventBus;
 
 public class ThreadDetailFragment extends BaseFragment implements PostAsyncTask.PostListener {
     public static final String ARG_TID_KEY = "tid";
+    public static final String ARG_FID_KEY = "fid";
     public static final String ARG_PID_KEY = "pid";
     public static final String ARG_TITLE_KEY = "title";
     public static final String ARG_FLOOR_KEY = "floor";
@@ -140,6 +142,9 @@ public class ThreadDetailFragment extends BaseFragment implements PostAsyncTask.
 
         if (getArguments().containsKey(ARG_TID_KEY)) {
             mTid = getArguments().getString(ARG_TID_KEY);
+        }
+        if (getArguments().containsKey(ARG_FID_KEY)) {
+            mFid = String.valueOf(getArguments().getInt(ARG_FID_KEY));
         }
         if (getArguments().containsKey(ARG_PID_KEY)) {
             mGotoPostId = getArguments().getString(ARG_PID_KEY);
@@ -662,7 +667,8 @@ public class ThreadDetailFragment extends BaseFragment implements PostAsyncTask.
             mDetailListView.setPullLoadEnable(false, mCurrentPage == mMaxPage);
             mDetailListView.setPullRefreshEnable(false, mCurrentPage == 1 ? mTitle : null);
 
-            return new DetailListLoader(mCtx, mMsgHandler, mTid, mGotoPostId, mTitle, args.getInt(LOADER_PAGE_KEY, 1));
+            return new DetailListLoader(mCtx, mMsgHandler, mTid, mGotoPostId, mTitle,
+                    args.getInt(LOADER_PAGE_KEY, 1), "25".equals(mFid));
         }
 
         @Override
@@ -1050,8 +1056,19 @@ public class ThreadDetailFragment extends BaseFragment implements PostAsyncTask.
                     break;
                 case ThreadListFragment.STAGE_RELOGIN:
                     mTipBar.setBackgroundColor(ContextCompat.getColor(mCtx, R.color.purple));
-                    mTipBar.setText("正在登录");
+                    mTipBar.setText("需要重新登录");
                     mTipBar.setVisibility(View.VISIBLE);
+                    break;
+                case ThreadListFragment.STAGE_NOT_LOGIN:
+                    mTipBar.setBackgroundColor(ContextCompat.getColor(mCtx, R.color.pink));
+                    Bundle loginBundle = msg.getData();
+                    mTipBar.setText(loginBundle.getString(ThreadListFragment.STAGE_ERROR_KEY));
+                    mTipBar.setVisibility(View.VISIBLE);
+                    LoginDialog loginDialog = LoginDialog.getInstance(getActivity());
+                    if (loginDialog != null) {
+                        loginDialog.setHandler(mMsgHandler);
+                        loginDialog.show();
+                    }
                     break;
                 case ThreadListFragment.STAGE_GET_WEBPAGE:
 //                    mTipBar.setBackgroundColor(mCtx.getResources().getColor(R.color.purple));

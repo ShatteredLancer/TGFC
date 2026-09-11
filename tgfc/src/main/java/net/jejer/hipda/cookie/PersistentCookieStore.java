@@ -10,9 +10,11 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -21,7 +23,10 @@ import java.util.concurrent.ConcurrentHashMap;
 public class PersistentCookieStore implements CookieStore {
     private static final String COOKIE_PREFS = "CookiePrefsFile";
     private static final String COOKIE_NAME_PREFIX = "cookie_";
-    private static final String COOKIE_DOMAIN = ".tgfcer.com";
+    private static final String COOKIE_DOMAIN = "tgfcer.com";
+    private static final String BBS_HOST = "bbs.tgfcer.com";
+    private static final String AUTH_COOKIE = "tgc_auth";
+    private static final String SESSION_COOKIE = "tgc_sid";
 
     private final HashMap<String, ConcurrentHashMap<String, HttpCookie>> cookies;
     private final SharedPreferences cookiePrefs;
@@ -38,17 +43,27 @@ public class PersistentCookieStore implements CookieStore {
         // Load any previously stored cookies into the store
         Map<String, ?> prefsMap = cookiePrefs.getAll();
         for (Map.Entry<String, ?> entry : prefsMap.entrySet()) {
-            if ((entry.getValue()) != null && !((String) entry.getValue()).startsWith(COOKIE_NAME_PREFIX)) {
+            if (!entry.getKey().startsWith(COOKIE_NAME_PREFIX) && entry.getValue() instanceof String) {
                 String[] cookieNames = TextUtils.split((String) entry.getValue(), ",");
                 for (String name : cookieNames) {
                     String encodedCookie = cookiePrefs.getString(COOKIE_NAME_PREFIX + name, null);
                     if (encodedCookie != null) {
                         HttpCookie decodedCookie = decodeCookie(encodedCookie);
-                        if (decodedCookie != null) {
+                        if (decodedCookie != null && !decodedCookie.hasExpired()) {
+                            String host = entry.getKey().toLowerCase(Locale.US);
+                            if (isUntrustedAuthCookie(host, decodedCookie))
+                                continue;
+                            // A legacy cross-domain SID may belong to either backend. Do not guess
+                            // during upgrade; the shared auth cookie can establish a fresh SID on
+                            // the next request to each host.
+                            if (isLegacySharedSessionCookie(host, decodedCookie))
+                                continue;
+                            normalizeCookieScope(host, decodedCookie);
                             if (!cookies.containsKey(entry.getKey()))
                                 cookies.put(entry.getKey(), new ConcurrentHashMap<String, HttpCookie>());
 
-                            cookies.get(entry.getKey()).put(name, decodedCookie);
+                            String token = getCookieToken(host, decodedCookie);
+                            cookies.get(entry.getKey()).put(token, decodedCookie);
                         }
                     }
                 }
@@ -58,47 +73,105 @@ public class PersistentCookieStore implements CookieStore {
     }
 
     @Override
-    public void add(URI uri, HttpCookie cookie) {
-        String name = getCookieToken(uri, cookie);
-        String host = uri.getHost();
+    public synchronized void add(URI uri, HttpCookie cookie) {
+        if (uri == null || cookie == null || TextUtils.isEmpty(uri.getHost()))
+            return;
 
-        // Save cookie into local store, or remove if expired
+        String host = uri.getHost().toLowerCase(Locale.US);
+
+        // BBS is the only login authority used by the app. The water-area host has a separate
+        // session backend but declares its cookies for .tgfcer.com; accepting an auth deletion or
+        // replacement from that host would log the user out of BBS as well.
+        if (isUntrustedAuthCookie(host, cookie))
+            return;
+
+        // bbs.tgfcer.com and s.tgfcer.com issue different SID values while both incorrectly mark
+        // them as cross-subdomain cookies. Keep each SID host-only so visiting one backend cannot
+        // replace the other backend's live session.
+        normalizeCookieScope(host, cookie);
+        String name = getCookieToken(host, cookie);
+
+        // Remove the exact cookie being replaced. For the BBS auth cookie, also remove legacy
+        // host-only copies left by earlier app versions so only one tgc_auth value is sent.
+        for (ConcurrentHashMap<String, HttpCookie> hostCookies : cookies.values()) {
+            for (Map.Entry<String, HttpCookie> entry : new ArrayList<>(hostCookies.entrySet())) {
+                HttpCookie existing = entry.getValue();
+                boolean sameNameAndPath = existing != null
+                        && cookie.getName().equals(existing.getName())
+                        && normalizedPath(cookie).equals(normalizedPath(existing));
+                boolean legacyAuthCopy = AUTH_COOKIE.equals(cookie.getName())
+                        && BBS_HOST.equals(host) && sameNameAndPath;
+                if (name.equals(entry.getKey()) || legacyAuthCopy)
+                    hostCookies.remove(entry.getKey());
+            }
+        }
+
         if (!cookie.hasExpired()) {
             if (!cookies.containsKey(host))
                 cookies.put(host, new ConcurrentHashMap<String, HttpCookie>());
             cookies.get(host).put(name, cookie);
-        } else {
-            if (cookies.containsKey(uri.toString()))
-                cookies.get(host).remove(name);
         }
 
         // Save cookie into persistent store
-        if (host.endsWith(COOKIE_DOMAIN) && cookies.get(host) != null) {
+        if (isTgfcerHost(host)) {
             SharedPreferences.Editor prefsWriter = cookiePrefs.edit();
-            prefsWriter.putString(host, TextUtils.join(",", cookies.get(host).keySet()));
-            prefsWriter.putString(COOKIE_NAME_PREFIX + name, encodeCookie(new HttpCookieParcelable(cookie)));
+            for (Map.Entry<String, ConcurrentHashMap<String, HttpCookie>> entry : cookies.entrySet()) {
+                if (!isTgfcerHost(entry.getKey()))
+                    continue;
+                if (entry.getValue().isEmpty())
+                    prefsWriter.remove(entry.getKey());
+                else
+                    prefsWriter.putString(entry.getKey(), TextUtils.join(",", entry.getValue().keySet()));
+            }
+            if (cookie.hasExpired())
+                prefsWriter.remove(COOKIE_NAME_PREFIX + name);
+            else
+                prefsWriter.putString(COOKIE_NAME_PREFIX + name, encodeCookie(new HttpCookieParcelable(cookie)));
             prefsWriter.apply();
         }
     }
 
     protected String getCookieToken(URI uri, HttpCookie cookie) {
-        return cookie.getName() + cookie.getDomain();
+        return getCookieToken(uri.getHost(), cookie);
+    }
+
+    private String getCookieToken(String host, HttpCookie cookie) {
+        String domain = cookie.getDomain();
+        String scope = TextUtils.isEmpty(domain) ? host : domain;
+        String path = TextUtils.isEmpty(cookie.getPath()) ? "/" : cookie.getPath();
+        return cookie.getName() + "|" + scope.toLowerCase(Locale.US) + "|" + path;
     }
 
     @Override
-    public List<HttpCookie> get(URI uri) {
+    public synchronized List<HttpCookie> get(URI uri) {
         ArrayList<HttpCookie> ret = new ArrayList<>();
-        if (uri.getHost().endsWith(COOKIE_DOMAIN))
-            for(Map.Entry<String, ConcurrentHashMap<String, HttpCookie>> entry:cookies.entrySet())
-                if(entry.getKey().endsWith(COOKIE_DOMAIN))
-                    ret.addAll(entry.getValue().values());
-        else if (cookies.containsKey(uri.getHost()))
-            ret.addAll(cookies.get(uri.getHost()).values());
+        Set<String> addedCookies = new HashSet<>();
+        String requestHost = uri.getHost();
+        String requestPath = TextUtils.isEmpty(uri.getPath()) ? "/" : uri.getPath();
+        for (Map.Entry<String, ConcurrentHashMap<String, HttpCookie>> entry : cookies.entrySet()) {
+            for (HttpCookie cookie : entry.getValue().values()) {
+                if (cookie.hasExpired())
+                    continue;
+                if (cookie.getSecure() && !"https".equalsIgnoreCase(uri.getScheme()))
+                    continue;
+                if (!pathMatches(cookie.getPath(), requestPath))
+                    continue;
+                String domain = cookie.getDomain();
+                if (TextUtils.isEmpty(domain)) {
+                    if (entry.getKey().equalsIgnoreCase(requestHost)
+                            && addedCookies.add(getCookieToken(entry.getKey(), cookie)))
+                        ret.add(cookie);
+                } else if (HttpCookie.domainMatches(domain, requestHost)
+                        && addedCookies.add(getCookieToken(entry.getKey(), cookie))) {
+                    ret.add(cookie);
+                }
+            }
+        }
         return ret;
     }
 
     @Override
-    public boolean removeAll() {
+    public synchronized boolean removeAll() {
         SharedPreferences.Editor prefsWriter = cookiePrefs.edit();
         prefsWriter.clear();
         prefsWriter.commit();
@@ -108,45 +181,91 @@ public class PersistentCookieStore implements CookieStore {
 
 
     @Override
-    public boolean remove(URI uri, HttpCookie cookie) {
-        String name = getCookieToken(uri, cookie);
-
-        if (cookies.containsKey(uri.getHost()) && cookies.get(uri.getHost()).containsKey(name)) {
-            cookies.get(uri.getHost()).remove(name);
-
-            SharedPreferences.Editor prefsWriter = cookiePrefs.edit();
-            if (cookiePrefs.contains(COOKIE_NAME_PREFIX + name)) {
-                prefsWriter.remove(COOKIE_NAME_PREFIX + name);
-            }
-            prefsWriter.putString(uri.getHost(), TextUtils.join(",", cookies.get(uri.getHost()).keySet()));
-            prefsWriter.apply();
-
-            return true;
-        } else {
+    public synchronized boolean remove(URI uri, HttpCookie cookie) {
+        if (uri == null || cookie == null || TextUtils.isEmpty(uri.getHost()))
             return false;
+        String host = uri.getHost().toLowerCase(Locale.US);
+        if (isUntrustedAuthCookie(host, cookie))
+            return false;
+        normalizeCookieScope(host, cookie);
+        String name = getCookieToken(host, cookie);
+        boolean removed = false;
+        for (ConcurrentHashMap<String, HttpCookie> hostCookies : cookies.values())
+            removed |= hostCookies.remove(name) != null;
+
+        if (removed) {
+            SharedPreferences.Editor prefsWriter = cookiePrefs.edit();
+            prefsWriter.remove(COOKIE_NAME_PREFIX + name);
+            for (Map.Entry<String, ConcurrentHashMap<String, HttpCookie>> entry : cookies.entrySet()) {
+                if (!isTgfcerHost(entry.getKey()))
+                    continue;
+                if (entry.getValue().isEmpty())
+                    prefsWriter.remove(entry.getKey());
+                else
+                    prefsWriter.putString(entry.getKey(), TextUtils.join(",", entry.getValue().keySet()));
+            }
+            prefsWriter.apply();
+            return true;
         }
+        return false;
     }
 
     @Override
-    public List<HttpCookie> getCookies() {
+    public synchronized List<HttpCookie> getCookies() {
         ArrayList<HttpCookie> ret = new ArrayList<>();
+        Set<String> addedCookies = new HashSet<>();
         for (String key : cookies.keySet())
-            ret.addAll(cookies.get(key).values());
+            for (HttpCookie cookie : cookies.get(key).values())
+                if (!cookie.hasExpired() && addedCookies.add(getCookieToken(key, cookie)))
+                    ret.add(cookie);
 
         return ret;
     }
 
     @Override
-    public List<URI> getURIs() {
+    public synchronized List<URI> getURIs() {
         ArrayList<URI> ret = new ArrayList<>();
         for (String key : cookies.keySet())
             try {
-                ret.add(new URI(key));
+                ret.add(new URI("https", key, "/", null));
             } catch (URISyntaxException e) {
                 e.printStackTrace();
             }
 
         return ret;
+    }
+
+    private boolean isTgfcerHost(String host) {
+        return host != null && (host.equals(COOKIE_DOMAIN) || host.endsWith("." + COOKIE_DOMAIN));
+    }
+
+    private boolean isUntrustedAuthCookie(String host, HttpCookie cookie) {
+        return isTgfcerHost(host) && !BBS_HOST.equals(host)
+                && AUTH_COOKIE.equals(cookie.getName());
+    }
+
+    private boolean isLegacySharedSessionCookie(String host, HttpCookie cookie) {
+        return isTgfcerHost(host) && SESSION_COOKIE.equals(cookie.getName())
+                && !TextUtils.isEmpty(cookie.getDomain());
+    }
+
+    private void normalizeCookieScope(String host, HttpCookie cookie) {
+        if (isTgfcerHost(host) && SESSION_COOKIE.equals(cookie.getName()))
+            cookie.setDomain(null);
+    }
+
+    private boolean pathMatches(String cookiePath, String requestPath) {
+        if (TextUtils.isEmpty(cookiePath) || "/".equals(cookiePath))
+            return true;
+        if (!requestPath.startsWith(cookiePath))
+            return false;
+        return requestPath.length() == cookiePath.length()
+                || cookiePath.endsWith("/")
+                || requestPath.charAt(cookiePath.length()) == '/';
+    }
+
+    private String normalizedPath(HttpCookie cookie) {
+        return TextUtils.isEmpty(cookie.getPath()) ? "/" : cookie.getPath();
     }
 
     /**

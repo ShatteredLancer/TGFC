@@ -50,6 +50,7 @@ import com.mikepenz.materialdrawer.util.DrawerImageLoader;
 import net.jejer.hipda.R;
 import net.jejer.hipda.async.FavoriteHelper;
 import net.jejer.hipda.async.LoginEvent;
+import net.jejer.hipda.async.LoginRequiredEvent;
 import net.jejer.hipda.async.SimpleListLoader;
 import net.jejer.hipda.async.UpdateHelper;
 import net.jejer.hipda.bean.HiSettingsHelper;
@@ -192,8 +193,11 @@ public class MainFrameActivity extends AppCompatActivity {
         });
 
         // Create the AccountHeader
-        String username = OkHttpHelper.getInstance().isLoggedIn() ? HiSettingsHelper.getInstance().getUsername() : "<未登录>";
-        String avatarUrl = OkHttpHelper.getInstance().isLoggedIn() ? HiUtils.getAvatarUrlByUid(HiSettingsHelper.getInstance().getUid()) : "";
+        boolean loggedIn = OkHttpHelper.getInstance().isLoggedIn();
+        String username = loggedIn ? HiSettingsHelper.getInstance().getUsername() : "<未登录>";
+        if (loggedIn && TextUtils.isEmpty(username))
+            username = "<已登录>";
+        String avatarUrl = loggedIn ? HiUtils.getAvatarUrlByUid(HiSettingsHelper.getInstance().getUid()) : "";
         accountHeader = new AccountHeaderBuilder()
                 .withActivity(this)
                 .withHeaderBackground(R.drawable.header)
@@ -306,8 +310,11 @@ public class MainFrameActivity extends AppCompatActivity {
 
     public void updateAccountHeader() {
         if (accountHeader != null) {
-            String username = OkHttpHelper.getInstance().isLoggedIn() ? HiSettingsHelper.getInstance().getUsername() : "<未登录>";
-            String avatarUrl = OkHttpHelper.getInstance().isLoggedIn() ? HiUtils.getAvatarUrlByUid(HiSettingsHelper.getInstance().getUid()) : "";
+            boolean loggedIn = OkHttpHelper.getInstance().isLoggedIn();
+            String username = loggedIn ? HiSettingsHelper.getInstance().getUsername() : "<未登录>";
+            if (loggedIn && TextUtils.isEmpty(username))
+                username = "<已登录>";
+            String avatarUrl = loggedIn ? HiUtils.getAvatarUrlByUid(HiSettingsHelper.getInstance().getUid()) : "";
             accountHeader.removeProfile(0);
             accountHeader.addProfile(new ProfileDrawerItem()
                     .withEmail(username)
@@ -602,6 +609,18 @@ public class MainFrameActivity extends AppCompatActivity {
     @SuppressWarnings("unused")
     public void onEventMainThread(LoginEvent event) {
         updateAccountHeader();
+    }
+
+    @SuppressWarnings("unused")
+    public void onEventMainThread(LoginRequiredEvent event) {
+        // Background loaders can post an event that was queued before WebView cookie import
+        // completed. Never create a new LoginDialog in that case: its initialization deliberately
+        // clears cookies to start a fresh login and would erase the newly authenticated session.
+        if (isFinishing() || LoginDialog.isLoginDialogShown())
+            return;
+        LoginDialog dialog = LoginDialog.getInstance(this);
+        if (dialog != null)
+            dialog.show();
     }
 
     public void askForPermission() {
