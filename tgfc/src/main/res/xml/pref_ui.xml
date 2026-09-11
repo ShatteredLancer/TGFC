@@ -78,6 +78,7 @@
         <net.jejer.hipda.ui.CustomSwitchPreference
             android:defaultValue="false"
             android:key="PERF_GESTURE_BACK"
+            android:summary="@string/pref_summary_gesture_back"
             android:title="@string/pref_title_gesture_back" />
     </PreferenceCategory>
 

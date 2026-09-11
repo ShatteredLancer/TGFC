@@ -415,7 +415,8 @@
     <string name="pref_title_tail_text">尾巴文字</string>
     <string name="pref_title_tail_url">尾巴链接</string>
     <string name="pref_title_encode_utf8">使用UTF8编码</string>
-    <string name="pref_title_gesture_back">右划手势返回</string>
+    <string name="pref_title_gesture_back">页面内右划返回</string>
+    <string name="pref_summary_gesture_back">控制页面内容区右划；系统边缘返回手势不受此开关影响</string>
     <string name="pref_title_hidden_platform">发帖/回帖不显示机型</string>
     <string name="pref_title_blacklist">黑名单, 每行一个用户名</string>
     <string name="pref_title_theme">界面主题</string>

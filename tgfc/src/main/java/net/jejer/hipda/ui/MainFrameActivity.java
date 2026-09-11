@@ -108,8 +108,9 @@ public class MainFrameActivity extends AppCompatActivity {
             public void onSwipeRight() {
                 if (HiSettingsHelper.getInstance().isGestureBack()
                         && !HiSettingsHelper.getInstance().getIsLandscape()
-                        && !(getFragmentManager().findFragmentByTag(PostFragment.class.getName()) instanceof PostFragment)) {
-                    popFragment();
+                        && !(getFragmentManager().findFragmentByTag(PostFragment.class.getName()) instanceof PostFragment)
+                        && !drawer.isDrawerOpen()) {
+                    onBackPressed();
                 }
             }
         };
@@ -398,6 +399,13 @@ public class MainFrameActivity extends AppCompatActivity {
 
         FragmentManager fm = getFragmentManager();
         Fragment fragment = fm.findFragmentById(R.id.main_frame_container);
+
+        // The forum list is the root screen. Back should expose navigation instead
+        // of finishing the activity when there is no fragment back stack.
+        if (fm.getBackStackEntryCount() == 0 && fragment instanceof ThreadListFragment) {
+            drawer.openDrawer();
+            return;
+        }
 
         if (fragment instanceof BaseFragment) {
             if (((BaseFragment) fragment).onBackPressed())
