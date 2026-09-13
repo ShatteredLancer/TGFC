@@ -357,3 +357,9 @@ APK 哈希可用 `Get-FileHash -Algorithm SHA256 <apk路径>` 记录；同时保
 验收时需要覆盖：顶层普通分区和水区的实体返回/右划、详情页返回/右划、设置页返回、侧边菜单打开时返回关闭菜单，以及关闭右划选项后的无动作行为。
 
 本轮代码已通过 `assembleDebug` 和 `assembleRelease`。最新 debug APK SHA-256 为 `678E2C5FDEF850862B22AF08803E9B984724FAB320723F32C25038BD3A27AB64`，签名 release APK SHA-256 为 `EA5545A69C76F2F47A44711D1AF24E0C00D4A1526592E595856B57E9031ECB34`；release 的 v1/v2 签名和 zipalign 校验通过，尚待真机交互验收。
+
+## 12. 附件图片路径兼容修复（2026-09-13）
+
+用户反馈部分帖子正文显示 `[[ERROR:UNPARSED IMG:/attachments/...]]`。根因是论坛新返回的站内附件图片使用 `/attachments/...` 绝对路径，而旧解析器只识别 `attachments/...` 相对路径，导致真实图片 URL 未进入图片加载队列。`HiParserThreadDetail` 现会在分类前规范化单个前导 `/`，并保留原始站内路径生成文件名；`HiUtils.getFullUrl` 同时避免双斜杠、支持协议相对 URL，正文图片和附件链接均统一生成 `https://bbs.tgfcer.com/...`。
+
+该修复将版本提升为 `1.4.5`（versionCode `29`）。验收需使用包含 `/attachments/day_...` 图片的帖子，确认正文直接显示图片、点击可打开大图，且普通 `attachments/...`、绝对 `https://...` 和 `//...` 图片路径不回归。

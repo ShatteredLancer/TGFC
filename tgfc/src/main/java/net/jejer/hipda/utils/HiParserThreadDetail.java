@@ -479,29 +479,37 @@ public class HiParserThreadDetail {
         } else if (contentN.nodeName().equals("img")) {
             Element e = (Element) contentN;
             String src = e.attr("src");
+            // Discuz may emit site-relative image paths with a leading slash.
+            // Normalize only the path used for classification; absolute URLs stay unchanged.
+            String normalizedSrc = src.startsWith("/") && !src.startsWith("//")
+                    ? src.substring(1) : src;
 
-            if (src.startsWith(HiUtils.SMILE_PATH)
-                    || SmallImages.contains(src)) {
+            boolean isSmallImage = SmallImages.contains(src)
+                    || SmallImages.contains(HiUtils.getFullUrl(normalizedSrc));
+            if (normalizedSrc.startsWith(HiUtils.SMILE_PATH)
+                    || isSmallImage) {
                 //emotion added as img tag, will be parsed in TextViewWithEmoticon later
-                if(!src.startsWith(HiUtils.Pic2_Url)) {
-                    content.addText("<img src=\"" + HiUtils.BaseUrl + src + "\"/>");
+                if(!normalizedSrc.startsWith(HiUtils.Pic2_Url)) {
+                    content.addText("<img src=\"" + HiUtils.getFullUrl(normalizedSrc) + "\"/>");
                 }
                 return false;
-            } else if (src.equals("images/common/none.gif") || src.startsWith("attachments/day_") || src.startsWith("attachment.php")) {
+            } else if (normalizedSrc.equals("images/common/none.gif")
+                    || normalizedSrc.startsWith("attachments/day_")
+                    || normalizedSrc.startsWith("attachment.php")) {
                 //internal image
-                content.addImg(e.attr("src"), e.attr("src").substring(e.attr("src").lastIndexOf("/")+1), true);
+                content.addImg(normalizedSrc, normalizedSrc.substring(normalizedSrc.lastIndexOf("/") + 1), true);
                 return false;
-            } else if (src.equals("images/common/")) {
+            } else if (normalizedSrc.equals("images/common/")) {
                 //skip common icons
                 return false;
-            } else if (src.startsWith("http://") || src.startsWith("https://")) {
+            } else if (src.startsWith("http://") || src.startsWith("https://") || src.startsWith("//")) {
                 //external image
-                content.addImg(src);
+                content.addImg(HiUtils.getFullUrl(src));
                 return false;
-            } else if (src.startsWith("images/attachicons/")) {
+            } else if (normalizedSrc.startsWith("images/attachicons/")) {
                 //attach icon
                 return false;
-            } else if (src.startsWith("images/default/")) {
+            } else if (normalizedSrc.startsWith("images/default/")) {
                 //default icon
                 return false;
             } else {

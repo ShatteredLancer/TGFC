@@ -183,10 +183,15 @@ public class HiUtils {
     }
 
     public static String getFullUrl(String particalUrl) {
-        if(particalUrl.startsWith("http")) {
+        if (TextUtils.isEmpty(particalUrl)) {
             return particalUrl;
-        }else{
-            return BaseUrl + particalUrl;
+        } else if (particalUrl.startsWith("http")) {
+            return particalUrl;
+        } else if (particalUrl.startsWith("//")) {
+            return "https:" + particalUrl;
+        } else {
+            return BaseUrl + (particalUrl.startsWith("/")
+                    ? particalUrl.substring(1) : particalUrl);
         }
     }
 

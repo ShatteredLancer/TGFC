@@ -8,8 +8,8 @@ android {
         applicationId "net.jejer.tgfc.ng"
         minSdkVersion 14
         targetSdkVersion 28
-        versionCode 28
-        versionName '1.4.4'
+        versionCode 29
+        versionName '1.4.5'
     }
 
     // Release credentials stay outside the repository. Set TGFC_RELEASE_SIGNING_FILE to an
